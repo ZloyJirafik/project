@@ -26,14 +26,17 @@ Screenshots and presentation notes are in [`presentation/`](presentation/).
 | Screen | What it does |
 |---|---|
 | **Дневник** (Diary) | Calories left today (progress ring), protein / carbs / fat bars, four meals. Browse other days with the arrows. |
-| **Продукты** (Foods) | Search 149 common foods in 10 categories, your recent foods, your own foods, and Open Food Facts online. |
-| **Сканер** (Scan) | Live barcode scanning with the camera (CameraX + ML Kit), scanning from a photo, or typing the number. |
+| **Продукты** (Foods) | Search 149 common foods in 10 categories, your recent foods, your own foods, and Open Food Facts online. The scan button in the search box opens the scanner. |
+| **Сканер** (Scan) | Scan a barcode or QR code with the camera (CameraX + ML Kit) or from a photo, or type the number. Opens the product card: photo, details, **Добавить** (adds it to «Мои продукты») and **Закрыть**. |
 | **Прогресс** (Progress) | Calories chart for the last 7 / 30 days, daily average, days on target, streak, macro balance. |
 | **Профиль** (Profile) | Calorie calculator (BMR → TDEE → goal), macro split, your own foods, backup export / import. |
 
 Other details:
 - Amounts in grams/ml or in servings ("1 шт.", "1 ломтик").
 - Create your own foods, with values per 100 g or per serving (converted automatically).
+- Build your own library in the store: scan a product, check its card and tap **Добавить**.
+  It's saved to «Мои продукты» with its photo, and the message that follows has a
+  **В дневник** button to log it right away.
 - Unknown barcode? Add the product yourself and it's found instantly next time.
 - Scanned products are saved on the phone, so they also work offline.
 - Undo after removing a diary entry.
@@ -104,18 +107,19 @@ CaloScanAndroid/
         │       │   ├── FoodSearch.kt         Search ranking
         │       │   ├── Portions.kt           Servings ↔ grams, +/− buttons
         │       │   ├── CustomFoodValidator.kt  Checks the "New food" form
+        │       │   ├── ProductCode.kt          Finds the barcode number in a QR code
         │       │   └── ProgressCalculator.kt   Averages, streak, macro share
-        │       ├── scan/BarcodeReader.kt   ML Kit barcode reading (camera + photo)
+        │       ├── scan/BarcodeReader.kt   ML Kit barcode + QR reading (camera + photo)
         │       ├── ui/
         │       │   ├── CaloScanApp.kt      Top bar, bottom tabs, messages
         │       │   ├── CaloScanViewModel.kt  App state and actions
         │       │   ├── diary/ foods/ scan/ progress/ profile/   One folder per screen
-        │       │   ├── sheets/             Bottom sheets (add food, new food, lookup)
+        │       │   ├── sheets/             Bottom sheets (product card, add food, new food, lookup)
         │       │   ├── components/         Shared UI pieces (cards, ring, bars...)
         │       │   ├── theme/              Colors for light and dark mode
         │       │   └── preview/            Example data for the design previews
         │       └── util/Format.kt          Russian number/date formatting, plurals
-        └── test/                           Unit tests (38 tests)
+        └── test/                           Unit tests (46 tests)
 licenses/Inter-OFL.txt                      Font license
 ```
 
@@ -170,14 +174,22 @@ Calories of a food entry = `kcal per 100 g × amount in grams ÷ 100`.
 ### Barcode scanning (`ui/scan/LiveBarcodeCamera.kt`, `scan/BarcodeReader.kt`)
 
 1. **CameraX** shows the camera preview and sends frames (1280×720) to an analyzer.
-2. **Google ML Kit** finds EAN-13, EAN-8, UPC-A and UPC-E barcodes in each frame. The
-   model is bundled in the app, so it works offline. A code must be read in two frames
-   in a row before it's used.
-3. "Scan from a photo" opens the system photo picker and runs ML Kit on the picture.
-4. The camera permission is asked the first time. If it was refused twice, the app
+2. **Google ML Kit** finds EAN-13, EAN-8, UPC-A and UPC-E barcodes, QR codes and
+   DataMatrix codes in each frame. The model is bundled in the app, so it works
+   offline. A code must be read in two frames in a row before it's used.
+3. A QR or DataMatrix code is only used when the product's barcode number is in it
+   (`domain/ProductCode.kt`), and its check digit must be right:
+   - a GS1 Digital Link address: `https://id.gs1.org/01/03017620422003`
+   - GS1 data, like the «Честный ЗНАК» codes: `0104601234567893215Abc…` (`01` + 14 digits)
+   - the number alone
+
+   A QR code without one (for example a link to the brand's website) shows
+   «В этом QR-коде нет номера товара».
+4. "Scan from a photo" opens the system photo picker and runs ML Kit on the picture.
+5. The camera permission is asked the first time. If it was refused twice, the app
    offers a button that opens the app's settings.
 
-### Product lookup (`ui/CaloScanViewModel.kt` → `lookupBarcode`)
+### Product lookup and the product card (`ui/CaloScanViewModel.kt` → `lookupBarcode`)
 
 Order: your own foods → products scanned before (saved on the phone) → Open Food Facts:
 
@@ -185,15 +197,29 @@ Order: your own foods → products scanned before (saved on the phone) → Open 
 GET https://world.openfoodfacts.org/api/v2/product/{barcode}.json
 ```
 
+A found product opens the **product card** (`ProductCardContent` in `ui/sheets/Sheets.kt`):
+the photo (the 400 px version from Open Food Facts), name, brand, package size,
+nutrition per 100 g, serving, barcode and source, then **Закрыть** and **Добавить**.
+
+- **Добавить** saves a copy to «Мои продукты» (`FoodRepository.addToLibrary`), photo
+  included. Next time the same barcode finds your copy first, and you can edit it.
+  The message after it has a **В дневник** button.
+- If Open Food Facts has no nutrition facts for the product, **Добавить** opens the
+  "New product" form with the name, brand, photo and barcode filled in; you copy the
+  numbers from the label.
+- If the product is already in «Мои продукты», the card says so, and its main
+  button is **В дневник**.
+- Not found anywhere: «Товар не найден» → **Добавить товар** opens the same form.
+
 Name search uses `https://world.openfoodfacts.org/cgi/search.pl`. That server is
 sometimes busy (HTTP 503), so the app tries up to 3 times.
 
 ## Running the tests
 
 The unit tests check the calorie formulas, food search, portions, the custom food
-form, the Open Food Facts parser, backups, the progress statistics and the Russian
-number, date and plural formatting. They run on
-the computer, no phone needed.
+form, the Open Food Facts parser, backups, the progress statistics, reading barcode
+numbers from QR codes, and the Russian number, date and plural formatting. They run
+on the computer, no phone needed.
 
 - In Android Studio: right-click the `app/src/test/kotlin` folder → **Run 'Tests in …'**.
 - Or in the terminal (Windows): `gradlew.bat test`

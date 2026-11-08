@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.caloscan.R
 import com.example.caloscan.data.model.Food
 import com.example.caloscan.scan.PhotoBarcodeReader
+import com.example.caloscan.scan.PhotoScan
 import com.example.caloscan.ui.CaloScanViewModel
 import com.example.caloscan.ui.components.CaloCard
 import com.example.caloscan.ui.components.CaloIcon
@@ -74,6 +75,9 @@ import kotlinx.coroutines.launch
 enum class Viewfinder { IDLE, LIVE, PAUSED, DENIED, NO_CAMERA, ERROR }
 
 private const val EXAMPLE_BARCODE = "3017620422003"
+
+/** A QR code with, for example, a link to the brand's website instead of the product number. */
+private const val NOT_A_PRODUCT_CODE = "В этом QR-коде нет номера товара. Отсканируйте штрихкод на упаковке."
 
 private fun hasCameraPermission(context: Context) =
   ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -121,8 +125,8 @@ fun ScanRoute(vm: CaloScanViewModel) {
   val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
     if (uri == null) return@rememberLauncherForActivityResult
     scope.launch {
-      status = "Считываем штрихкод с фото…"
-      val code = try {
+      status = "Считываем код с фото…"
+      val result = try {
         PhotoBarcodeReader.read(context, uri)
       } catch (e: CancellationException) {
         throw e
@@ -131,12 +135,19 @@ fun ScanRoute(vm: CaloScanViewModel) {
         vm.showMessage("Не удалось открыть изображение.")
         return@launch
       }
-      if (code != null) {
-        status = "Отсканировано: $code"
-        vm.lookupBarcode(code)
-      } else {
-        status = ""
-        vm.showMessage("Штрихкод не найден. Сфотографируйте ближе и чётче, чтобы полоски были ровными.")
+      when (result) {
+        is PhotoScan.Found -> {
+          status = "Отсканировано: ${result.code}"
+          vm.lookupBarcode(result.code)
+        }
+        PhotoScan.OtherCode -> {
+          status = ""
+          vm.showMessage(NOT_A_PRODUCT_CODE)
+        }
+        PhotoScan.NoCode -> {
+          status = ""
+          vm.showMessage("Код не найден. Сфотографируйте ближе и чётче, чтобы штрихкод или QR-код был ровным.")
+        }
       }
     }
   }
@@ -176,6 +187,7 @@ fun ScanRoute(vm: CaloScanViewModel) {
           vm.lookupBarcode(code)
         },
         onError = { cameraFailed = true },
+        onOtherCode = { status = NOT_A_PRODUCT_CODE },
       )
     },
   )
@@ -216,15 +228,15 @@ fun ScanScreen(
             Viewfinder.LIVE -> liveCamera()
             Viewfinder.IDLE -> Overlay(
               R.drawable.ic_scan,
-              "Наведите камеру на штрихкод на упаковке, чтобы узнать калорийность.",
+              "Наведите камеру на штрихкод или QR-код на упаковке — откроется карточка товара.",
             ) { Button(onClick = onStartCamera) { Text("Включить камеру") } }
-            Viewfinder.PAUSED -> Overlay(R.drawable.ic_scan, "Камера на паузе, пока открыт продукт.")
+            Viewfinder.PAUSED -> Overlay(R.drawable.ic_scan, "Камера на паузе, пока открыт товар.")
             Viewfinder.DENIED -> Overlay(
               R.drawable.ic_camera_off,
               if (askInSettings) {
                 "Доступ к камере выключен. Разрешите его в настройках приложения или отсканируйте фото."
               } else {
-                "Камера нужна, чтобы читать штрихкоды. Можно также отсканировать фото или ввести номер."
+                "Камера нужна, чтобы читать штрихкоды и QR-коды. Можно также отсканировать фото или ввести номер."
               },
             ) {
               if (askInSettings) {

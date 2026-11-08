@@ -37,7 +37,7 @@ or scanning a barcode with the camera.
 |---|---|
 | **Дневник** (Diary) | Calories left today in a progress ring, protein / carbs / fat bars, and four meals (breakfast, lunch, dinner, snacks). Arrows to browse other days. |
 | **Продукты** (Foods) | Search 149 common foods in 10 categories, your recent foods, your own foods, and the Open Food Facts product database online. |
-| **Сканер** (Scanner) | Live barcode scanning with the camera, scanning from a photo, or typing the barcode number. |
+| **Сканер** (Scanner) | Scan a barcode or QR code with the camera or from a photo, or type the barcode number. Opens a product card with the photo, details, and **Добавить** / **Закрыть**. |
 | **Прогресс** (Progress) | Calories chart for the last 7 or 30 days, daily average, days on target, streak, and macro balance. |
 | **Профиль** (Profile) | Calorie calculator, macro split, your own foods, and backup export / import. |
 
@@ -45,6 +45,8 @@ or scanning a barcode with the camera.
 
 - Amounts in grams / ml or in servings ("1 шт.", "1 ломтик").
 - Create your own foods, with values per 100 g or per serving (converted automatically).
+- Build your own product library in the store: scan the barcode or QR code, check the
+  product card (photo, nutrition per 100 g) and tap **Добавить** to save it to «Мои продукты».
 - Unknown barcode? Add the product yourself and it is found instantly next time.
 - Scanned products are saved on the phone, so they also work offline.
 - Undo after removing a diary entry.
@@ -67,20 +69,22 @@ BMR 1,775 → TDEE 2,751 → **target 2,250 kcal**.
 
 ### How a barcode is looked up
 
-Camera (CameraX) → barcode read on the phone (ML Kit, works offline; a code must
-be read in two frames in a row) → search order: **your own foods → products you
-scanned before → Open Food Facts online**. If the product isn't found anywhere,
-the app offers to add it.
+Camera (CameraX) → barcode or QR code read on the phone (ML Kit, works offline; a
+code must be read in two frames in a row; a QR code is used only if the product's
+barcode number is in it) → search order: **your own foods → products you scanned
+before → Open Food Facts online** → **product card** with the photo and details:
+**Добавить** saves it to «Мои продукты», **Закрыть** closes it. If the product isn't
+found anywhere, the app offers to add it by hand.
 
 ### Project in numbers
 
 | | |
 |---|---|
-| Screens | 5 main screens + bottom sheets (add food, new product, lookup) |
+| Screens | 5 main screens + bottom sheets (product card, add food, new product, lookup) |
 | Built-in foods | 149 in 10 categories |
-| Barcode formats | EAN-13, EAN-8, UPC-A, UPC-E |
+| Barcode formats | EAN-13, EAN-8, UPC-A, UPC-E, QR code, DataMatrix («Честный ЗНАК») |
 | Code | ≈ 5,500 lines of Kotlin |
-| Unit tests | 38 (formulas, search, portions, forms, parser, backups, statistics, formatting) |
+| Unit tests | 46 (formulas, search, portions, forms, parser, backups, statistics, QR codes, formatting) |
 | Runs on | Android 8.0 and newer |
 
 ---
@@ -170,7 +174,7 @@ accounts and cloud sync (e.g. Firebase), a home-screen widget.
 | Built-in food values | Based on **USDA FoodData Central** |
 | Font | Inter 4.1 (supports Cyrillic) |
 | Build | Gradle 9.1 + Android Gradle Plugin 9.0.1, version catalog |
-| Tests | JUnit 4, kotlinx-coroutines-test (38 unit tests) |
+| Tests | JUnit 4, kotlinx-coroutines-test (46 unit tests) |
 | Tools | Android Studio |
 | Android versions | minSdk 26 (Android 8.0), target / compile SDK 36 |
 

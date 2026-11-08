@@ -13,7 +13,6 @@ import com.example.caloscan.data.FoodRepository
 import com.example.caloscan.data.model.DiaryEntry
 import com.example.caloscan.data.model.Food
 import com.example.caloscan.data.model.Meal
-import com.example.caloscan.data.remote.OpenFoodFactsParser
 import com.example.caloscan.domain.CalorieCalculator
 import com.example.caloscan.domain.Profile
 import com.example.caloscan.domain.ProgressCalculator
@@ -257,7 +256,10 @@ class CaloScanViewModel(private val repo: FoodRepository) : ViewModel() {
 
   // ---------- Barcodes ----------
 
-  /** Finds a product: own foods → products scanned before → Open Food Facts. */
+  /**
+   * Finds a scanned product (own foods → products scanned before → Open Food Facts)
+   * and opens its card. If it isn't found, offers to add it by hand.
+   */
   fun lookupBarcode(raw: String) {
     val code = raw.filterNot { it.isWhitespace() || it == '-' }
     if (!BARCODE.matches(code)) {
@@ -268,7 +270,7 @@ class CaloScanViewModel(private val repo: FoodRepository) : ViewModel() {
     lookupJob = viewModelScope.launch {
       val saved = repo.findSavedByBarcode(code)
       if (saved != null) {
-        _sheet.value = addFoodSheet(saved)
+        _sheet.value = Sheet.Product(saved)
         return@launch
       }
 
@@ -283,18 +285,36 @@ class CaloScanViewModel(private val repo: FoodRepository) : ViewModel() {
       }
       if (_sheet.value != loading) return@launch // the user closed the sheet
 
-      _sheet.value = if (food != null && food.hasNutrition) {
-        repo.cacheProduct(food)
-        addFoodSheet(food)
-      } else {
-        val reason = when {
-          failed -> MissingReason.OFFLINE
-          food != null -> MissingReason.NO_NUTRITION
-          else -> MissingReason.NOT_FOUND
-        }
-        Sheet.Missing(code, reason, food)
+      // Kept on the phone, so the next scan works offline
+      if (food != null && food.hasNutrition) repo.cacheProduct(food)
+      _sheet.value = when {
+        food != null -> Sheet.Product(food)
+        failed -> Sheet.Missing(code, MissingReason.OFFLINE)
+        else -> Sheet.Missing(code, MissingReason.NOT_FOUND)
       }
     }
+  }
+
+  /**
+   * "Добавить" on a product card: saves the product to "My foods".
+   * Without nutrition facts, the form opens first so they can be copied from the label.
+   */
+  fun addToLibrary(food: Food) {
+    // The card closes right away, so a second tap can't add the product twice
+    if (_sheet.value !is Sheet.Product) return
+    if (!food.hasNutrition) {
+      _sheet.value = Sheet.CustomFood(CustomFoodDraft.fromScan(food.barcode, food))
+      return
+    }
+    _sheet.value = null
+    viewModelScope.launch { announceAdded(repo.addToLibrary(food)) }
+  }
+
+  /** "Added to My foods", with a button to put the product in the diary right away. */
+  private fun announceAdded(food: Food) {
+    _messages.trySend(
+      UiMessage("Добавлено в «Мои продукты»: ${food.name}", actionLabel = "В дневник") { openFood(food) },
+    )
   }
 
   // ---------- My foods ----------
@@ -305,30 +325,31 @@ class CaloScanViewModel(private val repo: FoodRepository) : ViewModel() {
 
   /** "Add this product" after a barcode wasn't found. */
   fun addMissingProduct(sheet: Sheet.Missing) {
-    val partial = sheet.partial
-    _sheet.value = Sheet.CustomFood(
-      CustomFoodDraft(
-        barcode = sheet.code,
-        name = partial?.name?.takeIf { it != OpenFoodFactsParser.UNNAMED }.orEmpty(),
-        brand = partial?.brand.orEmpty(),
-        unit = partial?.unit ?: "g",
-      ),
-    )
+    _sheet.value = Sheet.CustomFood(CustomFoodDraft.fromScan(sheet.code))
   }
 
   fun editCustomFood(food: Food) {
     _sheet.value = Sheet.CustomFood(CustomFoodDraft.from(food))
   }
 
-  /** Saves the food. A new food is then opened so it can be added to the diary. */
-  fun saveCustomFood(food: Food, editing: Boolean) {
+  /**
+   * Saves the food from the form. A new food is then opened so it can be added to
+   * the diary, except after a scan: then it's only added to "My foods".
+   */
+  fun saveCustomFood(food: Food, draft: CustomFoodDraft) {
     viewModelScope.launch {
-      val saved = repo.saveCustomFood(food)
-      if (editing) {
-        _sheet.value = null
-        showMessage("Сохранено: ${saved.name}")
-      } else {
-        _sheet.value = addFoodSheet(saved)
+      // The form has no photo field: keep the photo and package size of a scanned product
+      val saved = repo.saveCustomFood(food.copy(imageUrl = draft.imageUrl, packageSize = draft.packageSize))
+      when {
+        draft.editingId != null -> {
+          _sheet.value = null
+          showMessage("Сохранено: ${saved.name}")
+        }
+        draft.fromScan -> {
+          _sheet.value = null
+          announceAdded(saved)
+        }
+        else -> _sheet.value = addFoodSheet(saved)
       }
     }
   }

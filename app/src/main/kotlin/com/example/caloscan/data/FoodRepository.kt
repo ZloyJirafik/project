@@ -104,6 +104,21 @@ class FoodRepository(
     return saved
   }
 
+  /**
+   * Adds a scanned product to "My foods" as the user's own copy (with its photo),
+   * so it can be edited and is found first the next time it's scanned.
+   * Returns the saved food, or the one already in "My foods" with the same barcode.
+   */
+  suspend fun addToLibrary(product: Food): Food {
+    if (product.source == FoodSource.CUSTOM) return product
+    if (product.barcode.isNotBlank()) {
+      foodDao.findByBarcode(product.barcode)
+        ?.takeIf { it.source == FoodSource.CUSTOM.id }
+        ?.let { return it.toFood() }
+    }
+    return saveCustomFood(product.copy(id = ""))
+  }
+
   suspend fun deleteCustomFood(id: String) {
     foodDao.delete(id)
     recentDao.delete(id)

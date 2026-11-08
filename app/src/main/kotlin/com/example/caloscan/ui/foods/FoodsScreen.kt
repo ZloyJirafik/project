@@ -44,6 +44,7 @@ import com.example.caloscan.ui.CaloScanViewModel
 import com.example.caloscan.ui.FoodFilter
 import com.example.caloscan.ui.FoodResults
 import com.example.caloscan.ui.OnlineSearch
+import com.example.caloscan.ui.Tab
 import com.example.caloscan.ui.buildFoodResults
 import com.example.caloscan.ui.components.CaloCard
 import com.example.caloscan.ui.components.CaloIcon
@@ -80,6 +81,7 @@ fun FoodsRoute(vm: CaloScanViewModel) {
     onSearchOnline = vm::searchOnline,
     onOpenFood = vm::openFood,
     onCreateFood = { vm.newCustomFood(query.trim()) },
+    onScan = { vm.selectTab(Tab.SCAN) },
     onCancelAdding = vm::cancelAdding,
   )
 }
@@ -103,6 +105,7 @@ fun FoodsScreen(
   onSearchOnline: () -> Unit,
   onOpenFood: (Food) -> Unit,
   onCreateFood: () -> Unit,
+  onScan: () -> Unit,
   onCancelAdding: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -118,8 +121,12 @@ fun FoodsScreen(
         placeholder = { Text("Поиск: яблоко, рис, йогурт…") },
         leadingIcon = { CaloIcon(R.drawable.ic_search, contentDescription = null) },
         trailingIcon = {
-          if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) { CaloIcon(R.drawable.ic_close, "Очистить поиск") }
+          Row {
+            if (query.isNotEmpty()) {
+              IconButton(onClick = { onQueryChange("") }) { CaloIcon(R.drawable.ic_close, "Очистить поиск") }
+            }
+            // Not in the list? Scan the package
+            IconButton(onClick = onScan) { CaloIcon(R.drawable.ic_scan, "Сканировать штрихкод или QR-код") }
           }
         },
         singleLine = true,
@@ -230,6 +237,7 @@ private fun FoodsBrowsePreview() {
       onSearchOnline = {},
       onOpenFood = {},
       onCreateFood = {},
+      onScan = {},
       onCancelAdding = {},
     )
   }
@@ -250,6 +258,7 @@ private fun FoodsSearchPreview() {
       onSearchOnline = {},
       onOpenFood = {},
       onCreateFood = {},
+      onScan = {},
       onCancelAdding = {},
     )
   }

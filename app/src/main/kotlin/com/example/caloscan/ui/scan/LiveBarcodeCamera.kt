@@ -48,19 +48,22 @@ import kotlinx.coroutines.awaitCancellation
 import java.util.concurrent.Executors
 
 /**
- * Camera preview that reads barcodes (CameraX + ML Kit).
+ * Camera preview that reads barcodes and QR codes (CameraX + ML Kit).
  * The camera turns on when this is shown and off when it's removed or the app
  * goes to the background.
+ * [onOtherCode] is called while the camera sees a code without a product barcode in it.
  */
 @Composable
 fun LiveBarcodeCamera(
   onBarcode: (String) -> Unit,
   onError: (Throwable) -> Unit,
   modifier: Modifier = Modifier,
+  onOtherCode: () -> Unit = {},
 ) {
   val context = LocalContext.current
   val lifecycleOwner = LocalLifecycleOwner.current
   val currentOnBarcode by rememberUpdatedState(onBarcode)
+  val currentOnOtherCode by rememberUpdatedState(onOtherCode)
   val currentOnError by rememberUpdatedState(onError)
   val previewView = remember {
     PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
@@ -70,7 +73,10 @@ fun LiveBarcodeCamera(
 
   LaunchedEffect(lifecycleOwner) {
     val executor = Executors.newSingleThreadExecutor()
-    val analyzer = BarcodeAnalyzer { code -> currentOnBarcode(code) }
+    val analyzer = BarcodeAnalyzer(
+      onBarcode = { code -> currentOnBarcode(code) },
+      onOtherCode = { currentOnOtherCode() },
+    )
     var provider: ProcessCameraProvider? = null
     try {
       val cameraProvider = ProcessCameraProvider.awaitInstance(context)

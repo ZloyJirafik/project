@@ -17,6 +17,12 @@ object OpenFoodFactsParser {
   // "1 l", "500 ml", "1 л", "500 мл"
   private val liquid = Regex("\\d\\s*(ml|cl|dl|l|мл|л)(?!\\p{L})", RegexOption.IGNORE_CASE)
   private val leadingNumber = Regex("^\\s*-?\\d+(\\.\\d+)?")
+  // ".../front_ru.12.200.jpg": the photo is also available 100, 200 and 400 px wide
+  private val photoSize = Regex("\\.(100|200)\\.jpg$")
+
+  /** The 400 px version of an Open Food Facts photo, for the big photo on the product card. */
+  fun largeImageUrl(url: String): String =
+    if ("openfoodfacts" in url) photoSize.replace(url, ".400.jpg") else url
 
   fun toFood(product: JSONObject, fallbackCode: String = ""): Food {
     val n = product.optJSONObject("nutriments") ?: JSONObject()
